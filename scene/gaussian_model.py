@@ -90,7 +90,7 @@ class GaussianModel:
             self.xyz_gradient_accum,
             self.denom,
             self.optimizer.state_dict(),
-            self.shoptimizer.state_dict(),
+            self.shoptimizer.state_dict() if self.shoptimizer is not None else None,
             self.spatial_lr_scale,
         )
     
@@ -112,7 +112,8 @@ class GaussianModel:
         self.xyz_gradient_accum = xyz_gradient_accum
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
-        self.shoptimizer.load_state_dict(shopt_dict)
+        if self.shoptimizer is not None and shopt_dict is not None:
+            self.shoptimizer.load_state_dict(shopt_dict)
 
     @property
     def get_scaling(self):
