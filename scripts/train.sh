@@ -1,3 +1,7 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")/.."
+
 python train.py -s data//bicycle -i images_4 -m ./eval/bicycle_budget --quiet --eval --test_iterations -1  --optimizer_type default --budget 15  --densification_interval 500 --mode multiplier
 python train.py -s data//flowers -i images_4 -m ./eval/flowers_budget --quiet --eval --test_iterations -1  --optimizer_type default --budget 15  --densification_interval 500 --mode multiplier
 python train.py -s data//garden -i images_4 -m ./eval/garden_budget --quiet --eval --test_iterations -1  --optimizer_type default --budget 15  --densification_interval 500 --mode multiplier
