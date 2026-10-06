@@ -9,10 +9,10 @@ python train.py \
   --quiet \
   --eval \
   --test_iterations -1 \
-  --optimizer_type default \
+  --optimizer_type sparse_adam \
   --budget 15 \
   --densification_interval 500 \
-  --mode multiplier
+  --mode multiplier \
 
 python render.py -m ./eval/bicycle_budget
 python metrics.py -m ./eval/bicycle_budget
