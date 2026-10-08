@@ -54,6 +54,7 @@ class ModelParams(ParamGroup):
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
+        self.jetson = False
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -97,6 +98,9 @@ def get_combined_args(parser : ArgumentParser):
     cfgfile_string = "Namespace()"
     args_cmdline = parser.parse_args(cmdlne_string)
 
+    if getattr(args_cmdline, "jetson", False):
+        args_cmdline.model_path = add_jetson_suffix(args_cmdline.model_path)
+
     try:
         cfgfilepath = os.path.join(args_cmdline.model_path, "cfg_args")
         print("Looking for config file in", cfgfilepath)
@@ -112,4 +116,15 @@ def get_combined_args(parser : ArgumentParser):
     for k,v in vars(args_cmdline).items():
         if v != None:
             merged_dict[k] = v
-    return Namespace(**merged_dict)
+    merged_args = Namespace(**merged_dict)
+    if getattr(merged_args, "jetson", False):
+        merged_args.model_path = add_jetson_suffix(merged_args.model_path)
+    return merged_args
+
+
+def add_jetson_suffix(model_path):
+    """Select a separate output directory for Jetson runs."""
+    suffix = "_jetson"
+    if model_path and not model_path.endswith(suffix):
+        return model_path + suffix
+    return model_path

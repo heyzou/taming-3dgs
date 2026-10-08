@@ -20,6 +20,7 @@ import json
 from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser
+from arguments import add_jetson_suffix
 
 def readImages(renders_dir, gt_dir):
     renders = []
@@ -99,5 +100,9 @@ if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
     parser.add_argument('--model_paths', '-m', required=True, nargs="+", type=str, default=[])
+    parser.add_argument('--jetson', action='store_true',
+                        help='evaluate models in the corresponding *_jetson directories')
     args = parser.parse_args()
+    if args.jetson:
+        args.model_paths = [add_jetson_suffix(path) for path in args.model_paths]
     evaluate(args.model_paths)

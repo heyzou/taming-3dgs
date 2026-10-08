@@ -59,6 +59,8 @@ parser.add_argument("--output_path", default="./eval")
 parser.add_argument("--mode", type=str, default="big", choices=["budget", "big"])
 parser.add_argument("--optimizer_type", type=str, default="default")
 parser.add_argument("--sh_lower", action="store_true")
+parser.add_argument("--jetson", action="store_true",
+                    help="use separate *_jetson output directories")
 parser.add_argument("--dry_run", action="store_true")
 args, _ = parser.parse_known_args()
 
@@ -82,6 +84,9 @@ def run_cmd(CMD, args):
 if not args.skip_training:
     common_args = " --quiet --eval --test_iterations -1 "
     common_args += " --optimizer_type {}".format(args.optimizer_type)
+
+    if args.jetson:
+        common_args += " --jetson"
     
     if args.sh_lower:
         common_args += " --sh_lower"
@@ -157,12 +162,16 @@ if not args.skip_rendering:
         for scene in all_scenes:
             output_path = args.output_path + "/" + scene + "_big"
             CMD = f"python render.py -m {output_path}"
+            if args.jetson:
+                CMD += " --jetson"
             run_cmd(CMD, args)
     
     elif args.mode == "budget":
         for scene in all_scenes:
             output_path = args.output_path + "/" + scene + "_budget"
             CMD = f"python render.py -m {output_path}"
+            if args.jetson:
+                CMD += " --jetson"
             run_cmd(CMD, args)
 
 if not args.skip_metrics:
@@ -170,10 +179,14 @@ if not args.skip_metrics:
         for scene in all_scenes:
             output_path = args.output_path + "/" + scene + "_big"
             CMD = f"python metrics.py -m {output_path}"
+            if args.jetson:
+                CMD += " --jetson"
             run_cmd(CMD, args)
     
     elif args.mode == "budget":
         for scene in all_scenes:
             output_path = args.output_path + "/" + scene + "_budget"
             CMD = f"python metrics.py -m {output_path}"
+            if args.jetson:
+                CMD += " --jetson"
             run_cmd(CMD, args)

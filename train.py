@@ -24,7 +24,7 @@ import uuid
 from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
-from arguments import ModelParams, PipelineParams, OptimizationParams
+from arguments import ModelParams, PipelineParams, OptimizationParams, add_jetson_suffix
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -322,6 +322,8 @@ if __name__ == "__main__":
     parser.add_argument("--sh_lower", action='store_true', default=False)
     parser.add_argument("--benchmark_dir", type=str, default=None)
     args = parser.parse_args(sys.argv[1:])
+    if args.jetson:
+        args.model_path = add_jetson_suffix(args.model_path)
     args.save_iterations.append(args.iterations)
     
     print("Optimizing " + args.model_path)
