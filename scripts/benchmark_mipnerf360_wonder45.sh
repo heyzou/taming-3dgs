@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -e
+set -o pipefail
 cd "$(dirname "$0")/.."
+
+RESULT_FILE="./results/training_progress_wonder45.txt"
+mkdir -p results
+: > "$RESULT_FILE"
 
 # Jetson benchmark on wonder45
 run_scene() {
   local scene="$1"
   local images="$2"
   local budget="$3"
+  local tmp_log
+  local progress_line
+  tmp_log=$(mktemp)
   python train.py \
     -s "data/${scene}" \
     -i "${images}" \
@@ -19,7 +27,14 @@ run_scene() {
     --densification_interval 500 \
     --mode multiplier \
     --benchmark_dir "./eval/${scene}_budget_jetson" \
-    --jetson
+    --jetson \
+    2>&1 | tee "$tmp_log"
+
+  progress_line=$(tr '\r' '\n' < "$tmp_log" | grep "Training progress" | tail -n 1 || true)
+  if [[ -n "$progress_line" ]]; then
+    printf '[%s] %s\n' "$scene" "$progress_line" >> "$RESULT_FILE"
+  fi
+  rm -f "$tmp_log"
 }
 
 run_scene bonsai images_2 2
