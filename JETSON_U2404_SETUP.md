@@ -73,6 +73,9 @@ python -m pip install \
   websockets \
   pillow
 
+TensorBoardをinstall（1　iteration毎の処理時間を確認するためのツール）
+
+python -m pip install tensorboard
 
 ------------------------------------------------------------------------------
 sm_87に対応するPyTorchを入れたconda環境
