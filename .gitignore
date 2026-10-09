@@ -165,3 +165,8 @@ output
 # Local datasets and evaluation outputs
 data/
 eval/
+!eval/
+eval/*
+!eval/bicycle_budget/
+eval/bicycle_budget/*
+!eval/bicycle_budget/timing_100iter_stacked_bar.png
