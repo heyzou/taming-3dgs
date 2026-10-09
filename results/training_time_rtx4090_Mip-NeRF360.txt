@@ -14,3 +14,22 @@ treehill   2:44          @cad101     0.623   23.089  0.394
 --------------------------------------------------------------
 Ave        2:59                      0.788   27.220  0.270
 journal    8:xx                      0.799   27.29   0.253
+
+
+
+training time計測（詳細）
+
+Scene   Training Time    machine     
+-----------------------------------
+bicycle    xx:xx         @cad101
+bonsai     xx:xx         @cad102
+counter    xx:xx         @cad101
+flowers    xx:xx         @cad102
+garden     xx:xx         @cad101
+kitchen    xx:xx         @cad102
+room       xx:xx         @cad101
+stump      xx:xx         @cad102
+treehill   xx:xx         @cad101
+-----------------------------------
+Ave        xx:xx                   
+journal    N/A            
