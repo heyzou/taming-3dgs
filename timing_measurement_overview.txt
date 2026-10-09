@@ -1,0 +1,41 @@
+時間計測の構成
+================
+
+1. 学習全体
+------------
+training() 内で time.time() を使い、学習ループ全体を計測する。
+計測結果は標準出力に秒単位で表示。
+ファイルには保存しない。
+
+2. 1 iteration内の前半
+-----------------------
+各 iteration の開始直後に iter_start.record()、backward の直後に
+iter_end.record() を呼び出し、その区間を計測する。
+現在の範囲は、主に forward、loss 計算、backward までであり、
+optimizer step、densification、checkpoint保存などは含まない。
+計測値は training_report() に渡され、TensorBoard が有効な場合は
+iter_time として model_path 配下の TensorBoard ログに保存される。
+
+3. 処理ごとの計測
+------------------
+--benchmark_dir を指定した場合、torch.cuda.Event の start_time / end_time
+を使い、各イテレーションで次の処理をGPU時間（ミリ秒）として計測する。
+
+- forward  : render、正解画像転送、loss計算
+- backward : loss.backward()
+- step     : optimizer.step()、zero_grad()、SH optimizer等
+
+計測結果は以下に保存。
+
+<benchmark_dir>/forward.npy
+<benchmark_dir>/backward.npy
+<benchmark_dir>/step.npy
+
+※GPU処理は非同期で実行されるため、正確な計測値を得るには
+torch.cuda.synchronize() を呼び出してから elapsed_time() を取得する。
+
+5. 注意点
+---------
+densification、checkpoint保存、validationは現在の forward/backward/step の
+計測には含まれない。また、最終イテレーションでは optimizer step が実行
+されないため、step.npy の最後の値は通常のstep時間と区別して扱う。
