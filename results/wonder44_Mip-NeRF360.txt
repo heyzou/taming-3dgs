@@ -1,0 +1,31 @@
+Training time, cuda13.2,ubuntu os 2404
+
+Scene   Training Time    machine     SSIM↑   PSNR↑   LPIPS↓
+--------------------------------------------------------------
+bicycle    54:01         @wonder44   0.702   24.724  0.313
+bonsai     58:57         @wonder44   0.936   32.116  0.221
+counter    66:20         @wonder45   0.899   28.881  0.223
+flowers    45:04         @wonder44   0.552   21.031  0.411
+garden     84:03         @wonder45   0.850   27.308  0.141
+kitchen    82:49         @wonder44   0.919   31.097  0.147
+room       53:46         @wonder45   0.907   31.329  0.251
+stump      37:09         @wonder44   0.724   25.821  0.304
+treehill   53:15         @wonder45   0.623   23.045  0.390
+--------------------------------------------------------------
+Ave        59:29                     0.790   27.261  0.267
+journal    N/A                       N/A     N/A     N/A
+
+Bicycle 54:01
+----------------------------------------
+python train.py \
+  -s data/bicycle \
+  -i images_4 \
+  -m ./eval/bicycle_budget \
+  --quiet \
+  --eval \
+  --test_iterations -1 \
+  --optimizer_type sparse_adam \
+  --budget 15 \
+  --densification_interval 500 \
+  --mode multiplier \
+----------------------------------------
