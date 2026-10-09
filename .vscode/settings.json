@@ -1,5 +1,6 @@
 {
     "files.associations": {
         "tuple": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/home/nakai/proj-arm64/sample/taming-3dgs/submodules/diff-gaussian-rasterization/third_party/glm/test/ext"
 }
