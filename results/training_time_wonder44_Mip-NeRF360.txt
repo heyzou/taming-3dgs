@@ -22,17 +22,17 @@ training time計測（詳細）
 
 Scene   Training Time    machine     
 -------------------------------------
-bicycle    71:56         @wonder44
-bonsai     xx:xx         @wonder45
-counter    xx:xx         @wonder44
-flowers    xx:xx         @wonder45
-garden     xx:xx         @wonder44
-kitchen    82:49         @wonder45
-room       53:46         @wonder44
-stump      37:09         @wonder45
-treehill   53:15         @wonder44
+bicycle    72:56         @wonder44
+bonsai     77:31         @wonder45
+counter    83:57         @wonder44
+flowers    62:02         @wonder45
+garden     101:38        @wonder44
+kitchen    100:11        @wonder45
+room       70:49         @wonder44
+stump      54:12         @wonder45
+treehill   70:31         @wonder44
 -------------------------------------
-Ave        59:29                   
+Ave        77:05                   
 journal    N/A                     
 
 

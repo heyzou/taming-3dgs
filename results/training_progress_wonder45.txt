@@ -1,0 +1,4 @@
+[bonsai] Training progress: 100%|██████████| 30000/30000 [1:17:31<00:00,  6.45it/s, Loss=0.0261318]
+[flowers] Training progress: 100%|██████████| 30000/30000 [1:02:02<00:00,  8.06it/s, Loss=0.1038279]
+[kitchen] Training progress: 100%|██████████| 30000/30000 [1:40:11<00:00,  4.99it/s, Loss=0.0297313]
+[stump] Training progress: 100%|██████████| 30000/30000 [54:12<00:00,  9.22it/s, Loss=0.0889647]

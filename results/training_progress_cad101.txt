@@ -1,0 +1,5 @@
+[bicycle] Training progress: 100%|██████████| 30000/30000 [13:36<00:00, 36.73it/s, Loss=0.0950827]
+[counter] Training progress: 100%|██████████| 30000/30000 [14:00<00:00, 35.68it/s, Loss=0.0324481]
+[garden] Training progress: 100%|██████████| 30000/30000 [13:59<00:00, 35.72it/s, Loss=0.0429807]
+[room] Training progress: 100%|██████████| 30000/30000 [14:05<00:00, 35.48it/s, Loss=0.0230027]
+[treehill] Training progress: 100%|██████████| 30000/30000 [12:33<00:00, 39.80it/s, Loss=0.0964360]

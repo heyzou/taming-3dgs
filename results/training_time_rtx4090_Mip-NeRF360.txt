@@ -21,15 +21,15 @@ training time計測（詳細）
 
 Scene   Training Time    machine     
 -----------------------------------
-bicycle    xx:xx         @cad101
-bonsai     xx:xx         @cad102
-counter    xx:xx         @cad101
-flowers    xx:xx         @cad102
-garden     xx:xx         @cad101
-kitchen    xx:xx         @cad102
-room       xx:xx         @cad101
-stump      xx:xx         @cad102
-treehill   xx:xx         @cad101
+bicycle    13:36         @cad101
+bonsai     13:38         @cad102
+counter    14:00         @cad101
+flowers    13:55         @cad102
+garden     13:59         @cad101
+kitchen    13:21         @cad102
+room       14:05         @cad101
+stump      13:27         @cad102
+treehill   12:33         @cad101
 -----------------------------------
-Ave        xx:xx                   
+Ave        13:37                   
 journal    N/A            
