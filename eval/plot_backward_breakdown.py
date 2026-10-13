@@ -46,8 +46,12 @@ def plot(directory: Path, block_size: int) -> Path:
     rasterizer_residual_m = block_mean(rasterizer_residual, block_size)
     residual_m = block_mean(residual, block_size)
 
-    fig, (overall_ax, breakdown_ax, rasterizer_ax) = plt.subplots(
-        3, 1, figsize=(16, 14), sharex=True, constrained_layout=True
+    total_m = forward_m + backward_m + step_m
+    backward_ratio = backward_m / total_m * 100.0
+    render_ratio = rasterizer_render_m / total_m * 100.0
+
+    fig, (overall_ax, breakdown_ax, rasterizer_ax, summary_ax) = plt.subplots(
+        4, 1, figsize=(16, 18), sharex=True, constrained_layout=True
     )
 
     width = block_size * 0.9
@@ -109,6 +113,47 @@ def plot(directory: Path, block_size: int) -> Path:
     rasterizer_ax.grid(axis="y", alpha=0.25)
     rasterizer_ax.set_axisbelow(True)
     rasterizer_ax.legend(loc="upper left")
+
+    # Combine the mutually exclusive total-time breakdown and ratios in one graph.
+    summary_right_ax = summary_ax.twinx()
+    summary_bottom = np.zeros_like(forward_m)
+    summary_components = (
+        (forward_m, "Forward", "#2f66e5"),
+        (residual_m, "L1 + other backward", "#f59e0b"),
+        (ssim_m, "SSIM backward", "#8b5cf6"),
+        (rasterizer_residual_m, "Rasterizer setup / other", "#9ca3af"),
+        (rasterizer_render_m, "BACKWARD::render", "#ef4444"),
+        (rasterizer_preprocess_m, "BACKWARD::preprocess", "#2563eb"),
+        (step_m, "Optimizer step", "#16a34a"),
+    )
+    for values, label, color in summary_components:
+        summary_ax.bar(
+            x, values, width=width, align="edge", bottom=summary_bottom,
+            label=label, color=color
+        )
+        summary_bottom += values
+
+    summary_right_ax.plot(
+        x + width / 2, backward_ratio, color="#7f1d1d", linewidth=1.5,
+        marker="o", markersize=3, label="Backward / total"
+    )
+    summary_right_ax.plot(
+        x + width / 2, render_ratio, color="#1d4ed8", linewidth=1.5,
+        marker="o", markersize=3, label="BACKWARD::render / total"
+    )
+    summary_ax.set_xlabel(f"Iteration block (each block = {block_size} iterations)")
+    summary_ax.set_ylabel("Mean time per iteration (ms)")
+    summary_right_ax.set_ylabel("Ratio of total iteration time (%)")
+    summary_right_ax.set_ylim(0, 100)
+    summary_ax.set_title("Backward timing and ratio summary")
+    summary_ax.grid(axis="y", alpha=0.25)
+    summary_ax.set_axisbelow(True)
+    handles_left, labels_left = summary_ax.get_legend_handles_labels()
+    handles_right, labels_right = summary_right_ax.get_legend_handles_labels()
+    summary_ax.legend(
+        handles_left + handles_right, labels_left + labels_right,
+        loc="upper left"
+    )
 
     output = directory / "backward_breakdown.png"
     fig.savefig(output, dpi=180)
