@@ -13,6 +13,13 @@ from typing import NamedTuple
 import torch.nn as nn
 import torch
 from . import _C
+from utils.backward_timing import enabled, record_cuda_interval
+
+
+def get_last_backward_timing():
+    if not enabled():
+        return 0.0, 0.0
+    return _C.get_backward_timing()
 
 def cpu_deep_copy_tuple(input_tuple):
     copied_tensors = [item.cpu().clone() if isinstance(item, torch.Tensor) else item for item in input_tuple]
@@ -146,13 +153,25 @@ class _RasterizeGaussians(torch.autograd.Function):
         if raster_settings.debug:
             cpu_args = cpu_deep_copy_tuple(args) # Copy them before they can be corrupted
             try:
-                grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_dc, grad_sh, grad_scales, grad_rotations = _C.rasterize_gaussians_backward(*args)
+                _C.set_backward_timing_enabled(enabled())
+                # Measure only the Gaussian Rasterizer CUDA backward interval.
+                grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_dc, grad_sh, grad_scales, grad_rotations = record_cuda_interval(
+                    "rasterizer_backward",
+                    _C.rasterize_gaussians_backward,
+                    *args,
+                )
             except Exception as ex:
                 torch.save(cpu_args, "snapshot_bw.dump")
                 print("\nAn error occured in backward. Writing snapshot_bw.dump for debugging.\n")
                 raise ex
         else:
-             grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_dc, grad_sh, grad_scales, grad_rotations = _C.rasterize_gaussians_backward(*args)
+             _C.set_backward_timing_enabled(enabled())
+             # Measure only the Gaussian Rasterizer CUDA backward interval.
+             grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_dc, grad_sh, grad_scales, grad_rotations = record_cuda_interval(
+                 "rasterizer_backward",
+                 _C.rasterize_gaussians_backward,
+                 *args,
+             )
 
         grads = (
             grad_means3D,

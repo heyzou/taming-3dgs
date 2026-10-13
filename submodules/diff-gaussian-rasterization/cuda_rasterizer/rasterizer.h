@@ -14,6 +14,7 @@
 
 #include <vector>
 #include <functional>
+#include <tuple>
 
 namespace CudaRasterizer
 {
@@ -99,6 +100,9 @@ namespace CudaRasterizer
 			float* dL_dscale,
 			float* dL_drot,
 			bool debug);
+
+		static void set_backward_timing_enabled(bool enabled);
+		static std::tuple<float, float> get_backward_timing();
 	};
 };
 

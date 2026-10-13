@@ -32,6 +32,8 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 from utils.taming_utils import compute_gaussian_score, get_edges, get_count_array
+from utils import backward_timing
+from diff_gaussian_rasterization import get_last_backward_timing
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, websockets, score_coefficients, args):
     first_iter = 0
@@ -57,6 +59,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     time_taken = {
             "forward": [],
             "backward": [],
+            "ssim_backward": [],
+            "rasterizer_backward": [],
+            "rasterizer_render_backward": [],
+            "rasterizer_preprocess_backward": [],
             "step": []
     }
     start_time = torch.cuda.Event(enable_timing=True)
@@ -74,6 +80,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     first_iter += 1
     bg = torch.rand((3), device="cuda") if opt.random_background else background
     start = time.time()
+    # Enable nested backward timing only for benchmark runs.
+    backward_timing.configure(args.benchmark_dir is not None)
     for iteration in range(first_iter, opt.iterations + 1):
 
         if websockets:
@@ -132,6 +140,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             end_time.record()
             torch.cuda.synchronize()
             time_taken["backward"] += [start_time.elapsed_time(end_time)]
+            # Resolve SSIM/Rasterizer events after the total backward is complete.
+            nested_backward = backward_timing.finish_iteration()
+            time_taken["ssim_backward"] += [nested_backward["ssim_backward"]]
+            time_taken["rasterizer_backward"] += [nested_backward["rasterizer_backward"]]
+            render_ms, preprocess_ms = get_last_backward_timing()
+            time_taken["rasterizer_render_backward"] += [render_ms]
+            time_taken["rasterizer_preprocess_backward"] += [preprocess_ms]
 
         iter_end.record()
 
@@ -228,6 +243,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             os.makedirs(args.benchmark_dir, exist_ok = True)
             np.save(os.path.join(args.benchmark_dir, "forward.npy"), np.array(time_taken["forward"]))
             np.save(os.path.join(args.benchmark_dir, "backward.npy"), np.array(time_taken["backward"]))
+            np.save(os.path.join(args.benchmark_dir, "ssim_backward.npy"), np.array(time_taken["ssim_backward"]))
+            np.save(os.path.join(args.benchmark_dir, "rasterizer_backward.npy"), np.array(time_taken["rasterizer_backward"]))
+            np.save(os.path.join(args.benchmark_dir, "rasterizer_render_backward.npy"), np.array(time_taken["rasterizer_render_backward"]))
+            np.save(os.path.join(args.benchmark_dir, "rasterizer_preprocess_backward.npy"), np.array(time_taken["rasterizer_preprocess_backward"]))
             np.save(os.path.join(args.benchmark_dir, "step.npy"), np.array(time_taken["step"]))
 
     end = time.time()

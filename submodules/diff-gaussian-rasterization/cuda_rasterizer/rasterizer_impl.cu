@@ -30,6 +30,40 @@ namespace cg = cooperative_groups;
 #include "forward.h"
 #include "backward.h"
 
+namespace
+{
+	bool backward_timing_enabled = false;
+	cudaEvent_t render_start_event = nullptr;
+	cudaEvent_t render_end_event = nullptr;
+	cudaEvent_t preprocess_start_event = nullptr;
+	cudaEvent_t preprocess_end_event = nullptr;
+}
+
+void CudaRasterizer::Rasterizer::set_backward_timing_enabled(bool enabled)
+{
+	backward_timing_enabled = enabled;
+}
+
+std::tuple<float, float> CudaRasterizer::Rasterizer::get_backward_timing()
+{
+	if (!backward_timing_enabled || render_start_event == nullptr)
+		return std::make_tuple(0.0f, 0.0f);
+
+	float render_ms = 0.0f;
+	float preprocess_ms = 0.0f;
+	cudaEventElapsedTime(&render_ms, render_start_event, render_end_event);
+	cudaEventElapsedTime(&preprocess_ms, preprocess_start_event, preprocess_end_event);
+	cudaEventDestroy(render_start_event);
+	cudaEventDestroy(render_end_event);
+	cudaEventDestroy(preprocess_start_event);
+	cudaEventDestroy(preprocess_end_event);
+	render_start_event = nullptr;
+	render_end_event = nullptr;
+	preprocess_start_event = nullptr;
+	preprocess_end_event = nullptr;
+	return std::make_tuple(render_ms, preprocess_ms);
+}
+
 // Helper function to find the next-highest bit of the MSB
 // on the CPU.
 uint32_t getHigherMsb(uint32_t n)
@@ -568,6 +602,14 @@ void CudaRasterizer::Rasterizer::backward(
 	// opacity and RGB of Gaussians from per-pixel loss gradients.
 	// If we were given precomputed colors and not SHs, use them.
 	const float* color_ptr = (colors_precomp != nullptr) ? colors_precomp : geomState.rgb;
+	if (backward_timing_enabled)
+	{
+		cudaEventCreate(&render_start_event);
+		cudaEventCreate(&render_end_event);
+		cudaEventCreate(&preprocess_start_event);
+		cudaEventCreate(&preprocess_end_event);
+		cudaEventRecord(render_start_event);
+	}
 	CHECK_CUDA(BACKWARD::render(
 		tile_grid,
 		block,
@@ -591,11 +633,15 @@ void CudaRasterizer::Rasterizer::backward(
 		(float4*)dL_dconic,
 		dL_dopacity,
 		dL_dcolor), debug)
+	if (backward_timing_enabled)
+		cudaEventRecord(render_end_event);
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,
 	// use the one we computed ourselves.
 	const float* cov3D_ptr = (cov3D_precomp != nullptr) ? cov3D_precomp : geomState.cov3D;
+	if (backward_timing_enabled)
+		cudaEventRecord(preprocess_start_event);
 	CHECK_CUDA(BACKWARD::preprocess(P, D, M,
 		(float3*)means3D,
 		radii,
@@ -620,4 +666,6 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dsh,
 		(glm::vec3*)dL_dscale,
 		(glm::vec4*)dL_drot), debug)
+	if (backward_timing_enabled)
+		cudaEventRecord(preprocess_end_event);
 }

@@ -11,10 +11,13 @@
 
 #include <torch/extension.h>
 #include "rasterize_points.h"
+#include "cuda_rasterizer/rasterizer.h"
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("rasterize_gaussians", &RasterizeGaussiansCUDA);
   m.def("rasterize_gaussians_backward", &RasterizeGaussiansBackwardCUDA);
+  m.def("set_backward_timing_enabled", &CudaRasterizer::Rasterizer::set_backward_timing_enabled);
+  m.def("get_backward_timing", &CudaRasterizer::Rasterizer::get_backward_timing);
   m.def("mark_visible", &markVisible);
   m.def("adamUpdate", &adamUpdate);
 }
