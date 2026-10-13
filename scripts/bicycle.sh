@@ -13,8 +13,8 @@ python train.py \
   --budget 15 \
   --densification_interval 500 \
   --mode multiplier \
-  --benchmark_dir ./eval/bicycle_budget \
-#   --jetson
+  --benchmark_dir ./eval/bicycle_budget_jetson/backward_breakdown_wonder44 \
+  --jetson
 
 # python render.py -m ./eval/bicycle_budget --jetson
 # python metrics.py -m ./eval/bicycle_budget --jetson

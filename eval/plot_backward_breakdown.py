@@ -53,6 +53,7 @@ def plot(directory: Path, block_size: int) -> Path:
     fig, (overall_ax, breakdown_ax, rasterizer_ax, summary_ax) = plt.subplots(
         4, 1, figsize=(16, 18), sharex=True, constrained_layout=True
     )
+    fig.suptitle("Backward breakdown — wonder44", fontsize=18)
 
     width = block_size * 0.9
     overall_ax.bar(x, forward_m, width=width, align="edge", label="Forward", color="#2f66e5")
@@ -167,7 +168,7 @@ def main() -> None:
         "directory",
         nargs="?",
         type=Path,
-        default=Path("eval/bicycle_budget_jetson/backward_breakdown"),
+        default=Path("eval/bicycle_budget_jetson/backward_breakdown_wonder44"),
     )
     parser.add_argument("--block-size", type=int, default=100)
     args = parser.parse_args()
