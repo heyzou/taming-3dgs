@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import argparse
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,6 +16,9 @@ def block_mean(values: np.ndarray, block_size: int) -> np.ndarray:
 
 
 def plot(directory: Path, block_size: int) -> Path:
+    device_match = re.search(r"(wonder\d+)$", directory.name)
+    device_label = device_match.group(1) if device_match else "unknown device"
+
     forward = np.load(directory / "forward.npy")
     backward = np.load(directory / "backward.npy")
     ssim = np.load(directory / "ssim_backward.npy")
@@ -53,7 +57,7 @@ def plot(directory: Path, block_size: int) -> Path:
     fig, (overall_ax, breakdown_ax, rasterizer_ax, summary_ax) = plt.subplots(
         4, 1, figsize=(16, 18), sharex=True, constrained_layout=True
     )
-    fig.suptitle("Backward breakdown — wonder44", fontsize=18)
+    fig.suptitle(f"Backward breakdown — {device_label}", fontsize=18)
 
     width = block_size * 0.9
     overall_ax.bar(x, forward_m, width=width, align="edge", label="Forward", color="#2f66e5")
