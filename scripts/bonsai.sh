@@ -13,7 +13,7 @@ python train.py \
   --budget 2 \
   --densification_interval 500 \
   --mode multiplier \
-  --benchmark_dir ./eval/bonsai_budget_jetson \
+  --benchmark_dir ./eval/bonsai_budget_jetson/backward_breakdown_wonder45 \
   --jetson
 # python render.py -m ./eval/bonsai_budget  --jetson
 # python metrics.py -m ./eval/bonsai_budget --jetson

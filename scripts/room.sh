@@ -13,6 +13,7 @@ python train.py \
   --budget 2 \
   --densification_interval 500 \
   --mode multiplier \
+  --benchmark_dir ./eval/room_budget_jetson/backward_breakdown_wonder44 \
   --jetson
-python render.py -m ./eval/room_budget --jetson
-python metrics.py -m ./eval/room_budget --jetson
+# python render.py -m ./eval/room_budget --jetson
+# python metrics.py -m ./eval/room_budget --jetson

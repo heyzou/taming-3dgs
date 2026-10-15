@@ -13,6 +13,7 @@ python train.py \
   --budget 15 \
   --densification_interval 500 \
   --mode multiplier \
+  --benchmark_dir ./eval/stump_budget_jetson/backward_breakdown_wonder45 \
   --jetson
-python render.py -m ./eval/stump_budget --jetson
-python metrics.py -m ./eval/stump_budget --jetson
+# python render.py -m ./eval/stump_budget --jetson
+# python metrics.py -m ./eval/stump_budget --jetson

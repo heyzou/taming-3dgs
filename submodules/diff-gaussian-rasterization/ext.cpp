@@ -10,6 +10,7 @@
  */
 
 #include <torch/extension.h>
+#include <cuda_runtime.h>
 #include "rasterize_points.h"
 #include "cuda_rasterizer/rasterizer.h"
 
