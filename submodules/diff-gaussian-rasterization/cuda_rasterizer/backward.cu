@@ -531,7 +531,7 @@ PerGaussianRenderCUDA(
 		const float2 pixf = {(float)pix.x, (float)pix.y};
 		bool valid_pixel = pix.x < W && pix.y < H;
 
-		// every 32nd thread should read the stored state from memory
+		// every 32nd thread should read the stored state from memoryT
 		// TODO: perhaps store these things in shared memory?
 		if (valid_splat && valid_pixel && my_warp.thread_rank() == 0 && idx < BLOCK_SIZE)
 		{
@@ -572,7 +572,7 @@ PerGaussianRenderCUDA(
 			float dL_dalpha = 0.0f;
 			for (int ch = 0; ch < C; ++ch)
 			{
-				ar[ch] += dchannel_dcolor * c[ch];
+				ar[ch] += dchannel_dcolor * c[ch];//自身のGaussianの影響を追加
 				const float &dL_dchannel = dL_dpixel[ch];
 				Register_dL_dcolors[ch] += dchannel_dcolor * dL_dchannel;
 				dL_dalpha += (c[ch] * T + one_minus_alpha_reci * ar[ch]) * dL_dchannel;
