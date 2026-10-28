@@ -69,6 +69,7 @@ class PipelineParams(ParamGroup):
         self.compute_cov3D_python = False
         self.cpu_backward_render = False
         self.compare_cpu_cuda_backward_render = False
+        self.profile_cpu_backward_render = False
         self.debug = False
         super().__init__(parser, "Pipeline Parameters")
 

@@ -61,3 +61,131 @@ CPU版は、同じ勾配を逐次的に加算する。
 そのため、計算式と加算対象が同じでもCPU版とCUDA版はbit単位では完全一致しない。
 今回の結果では、非ゼロ位置、符号、勾配構造は一致し、差は相対的に約1e-7である。
 ------------------------------------------------------------
+
+2. BACKWARD::render_cpuのボトルネック計測
+
+計測方法
+------------------------------------------------------------
+ビルド設定は「-O3 -g」とする。
+
+- -O3 : 実運用と同じコンパイラ最適化を有効にする
+- -g  : CPU命令をbackward_cpu.cppのソース行と対応させる
+
+大きな処理区間はC++標準ライブラリのstd::chronoで実時間を計測する。
+
+- GPUからCPUへのデータ転送
+- CPU上の勾配配列初期化
+- render_cpu全体
+- CPUからGPUへの勾配転送
+
+render_cpu内部にはchronoを入れず、元の1ループを維持する。
+Nsight SystemsのCPUサンプリングを次の14区間へ分類する。
+
+1. Tile / pixel preparation
+2. Gaussian preparation
+3. Pixel eligibility check
+4. Gaussian exponent（dx、dy、power）
+5. Gaussian weight（exp）
+6. Alpha calculation
+7. Alpha threshold
+8. Color gradient
+9. Foreground alpha gradient
+10. Background alpha gradient
+11. Transmittance update
+12. Mean gradient
+13. Conic / opacity gradient
+14. Output accumulation
+
+各区間の時間は次の式で推定し、時間の大きい順にCSVへ出力する。
+
+区間の推定時間 = render_cpu時間の中央値 × 区間のサンプル数 / 全サンプル数
+
+出力項目は、順位、区間名、サンプル数、割合、推定時間、実行回数、
+1回あたりの推定時間とする。
+
+処理量を確認するため、次の実行回数もカウントする。
+
+- bucket数
+- Gaussian x pixel試行回数
+- exp実行回数
+- alphaでスキップした回数
+- 実際に勾配計算した回数
+
+pixelごとのchronoやNVTXは計測負荷が大きいため使用しない。
+全体時間はchrono、内部割合はCPUサンプリング、処理量はカウンターで確認する。
+
+実行方法
+------------------------------------------------------------
+1. C++拡張を再ビルドする。
+
+cd submodules/diff-gaussian-rasterization
+TORCH_CUDA_ARCH_LIST=8.7 python setup.py build_ext --inplace
+cd ../..
+
+2. chronoとカウンターを5回計測する。
+
+bash scripts/profile_bicycle_cpu_backward_render.sh
+
+出力:
+results/bicycle_cpu_backward_render_profile.csv
+
+3. Nsight Systemsで20回サンプリングする。
+
+bash scripts/sample_bicycle_cpu_backward_render.sh
+
+このスクリプトはNsight計測後、14区間の解析と画像生成も実行する。
+
+出力:
+
+- results/bicycle_cpu_backward_render_nsys.nsys-rep
+- results/bicycle_cpu_backward_render_sections.csv
+- results/bicycle_cpu_backward_render_profile.png
+
+デフォルトの計測条件:
+
+- bicycleのimages_8
+- 固定画像1枚
+- SfM初期Gaussian全数
+- optimizer更新なし
+- ウォームアップ1回
+- chrono計測5回
+- Nsightサンプリング20回
+
+ウォームアップは初回初期化の影響を除くための1回で、結果には含めない。
+chronoは5回の中央値、内部区間は20回分のCPUサンプル割合を使用する。
+
+計測結果
+------------------------------------------------------------
+14区間版、5回のchrono中央値:
+
+- 全体: 1211.08 ms
+- GPU -> CPU転送: 46.30 ms
+- CPU勾配配列初期化: 3.12 ms
+- render_cpu: 1160.45 ms
+- CPU -> GPU転送: 0.794 ms
+
+Nsightサンプルから求めたrender_cpu内部の推定時間（降順）:
+
+1. Gaussian exponent: 427.76 ms（36.86%）
+2. Alpha threshold: 390.81 ms（33.68%）
+3. Gaussian weight: 81.78 ms（7.05%）
+4. Foreground alpha gradient: 59.84 ms（5.16%）
+5. Pixel eligibility check: 47.79 ms（4.12%）
+6. Alpha calculation: 45.71 ms（3.94%）
+7. Mean gradient: 25.10 ms（2.16%）
+8. Tile / pixel preparation: 23.16 ms（2.00%）
+9. Output accumulation: 16.11 ms（1.39%）
+10. Background alpha gradient: 12.43 ms（1.07%）
+11. Conic / opacity gradient: 10.43 ms（0.90%）
+12. Color gradient: 9.43 ms（0.81%）
+13. Gaussian preparation: 8.09 ms（0.70%）
+14. Transmittance update: 2.02 ms（0.17%）
+
+最大のボトルネックはGaussian exponentで、次がAlpha thresholdである。
+この2区間でrender_cpuの約70.54%を占める。
+
+詳細:
+
+- results/bicycle_cpu_backward_render_sections.csv
+- results/bicycle_cpu_backward_render_profile.png
+------------------------------------------------------------

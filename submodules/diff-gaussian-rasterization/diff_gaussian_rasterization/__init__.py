@@ -23,6 +23,10 @@ def get_last_backward_render_comparison():
     return _last_backward_render_comparison
 
 
+def get_last_cpu_backward_profile():
+    return dict(_C.get_cpu_backward_profile())
+
+
 def _compare_backward_render_tensor(cuda_tensor, cpu_tensor):
     cuda_value = cuda_tensor.detach().cpu()
     cpu_value = cpu_tensor.detach().cpu()
@@ -181,6 +185,11 @@ class _RasterizeGaussians(torch.autograd.Function):
             )
 
         # Compute gradients for relevant tensors by invoking backward method
+        _C.set_cpu_backward_profile_enabled(
+            raster_settings.cpu_backward_render
+            and raster_settings.profile_cpu_backward_render
+            and not raster_settings.compare_cpu_cuda_backward_render
+        )
         if raster_settings.compare_cpu_cuda_backward_render:
             _C.set_backward_timing_enabled(False)
             cuda_outputs = run_native_backward(False)
@@ -250,6 +259,7 @@ class GaussianRasterizationSettings(NamedTuple):
     prefiltered : bool
     cpu_backward_render : bool
     compare_cpu_cuda_backward_render : bool
+    profile_cpu_backward_render : bool
     debug : bool
     pixel_weights : torch.Tensor
 

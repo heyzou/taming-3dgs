@@ -47,6 +47,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         prefiltered=False,
         cpu_backward_render=pipe.cpu_backward_render,
         compare_cpu_cuda_backward_render=pipe.compare_cpu_cuda_backward_render,
+        profile_cpu_backward_render=pipe.profile_cpu_backward_render,
         debug=pipe.debug,
         pixel_weights=pixel_weights
     )

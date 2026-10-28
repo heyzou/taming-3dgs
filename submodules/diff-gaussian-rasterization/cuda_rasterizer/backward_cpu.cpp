@@ -20,11 +20,35 @@ namespace
 	constexpr int kChannels = NUM_CHAFFELS;
 	constexpr int kBucketSize = 32;
 	constexpr int kBlockSize = BLOCK_X * BLOCK_Y;
+	bool cpu_profile_is_enabled = false;
+	BACKWARD::CpuRenderProfile last_cpu_profile;
 
 	inline std::size_t channel_pixel_index(int channel, int pixel_id, int image_size)
 	{
 		return static_cast<std::size_t>(channel) * image_size + pixel_id;
 	}
+}
+
+void BACKWARD::set_cpu_profile_enabled(bool enabled)
+{
+	cpu_profile_is_enabled = enabled;
+	if (!enabled)
+		last_cpu_profile = CpuRenderProfile{};
+}
+
+bool BACKWARD::cpu_profile_enabled()
+{
+	return cpu_profile_is_enabled;
+}
+
+BACKWARD::CpuRenderProfile BACKWARD::get_cpu_profile()
+{
+	return last_cpu_profile;
+}
+
+void BACKWARD::store_cpu_profile(const CpuRenderProfile& profile)
+{
+	last_cpu_profile = profile;
 }
 
 void BACKWARD::render_cpu(
@@ -47,7 +71,8 @@ void BACKWARD::render_cpu(
 	float* dL_dmean2D,
 	float* dL_dconic2D,
 	float* dL_dopacity,
-	float* dL_dcolors)
+	float* dL_dcolors,
+	CpuRenderProfile* profile)
 {
 	const int image_size = W * H;
 	const int horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
@@ -65,8 +90,11 @@ void BACKWARD::render_cpu(
 	std::array<std::array<float, kBlockSize>, kChannels> accumulated_remainder{};
 	std::array<std::array<float, kBlockSize>, kChannels> pixel_gradients{};
 
+	// PROFILE_SECTION: Tile / pixel preparation
 	for (int global_bucket_idx = 0; global_bucket_idx < B; ++global_bucket_idx)
 	{
+		if (profile)
+			++profile->buckets;
 		const std::uint32_t tile_id = bucket_to_tile[global_bucket_idx];
 		if (tile_id >= static_cast<std::uint32_t>(num_tiles))
 			throw std::runtime_error("CPU backward render received an invalid tile index");
@@ -83,7 +111,11 @@ void BACKWARD::render_cpu(
 		// This is the same whole-bucket early exit used by
 		// PerGaussianRenderCUDA.
 		if (first_splat_in_bucket >= static_cast<int>(max_contrib[tile_id]))
+		{
+			if (profile)
+				++profile->buckets_skipped;
 			continue;
+		}
 
 		const int tile_x = static_cast<int>(tile_id) % horizontal_blocks;
 		const int tile_y = static_cast<int>(tile_id) / horizontal_blocks;
@@ -127,7 +159,13 @@ void BACKWARD::render_cpu(
 			const std::uint32_t gaussian_idx = point_list[range_start + splat_idx_in_tile];
 			if (gaussian_idx >= static_cast<std::uint32_t>(P))
 				throw std::runtime_error("CPU backward render received an invalid Gaussian index");
+			if (profile)
+			{
+				++profile->splats;
+				profile->gaussian_pixel_tests += kBlockSize;
+			}
 
+			// PROFILE_SECTION: Gaussian preparation
 			const float mean_x = means2D[2 * gaussian_idx];
 			const float mean_y = means2D[2 * gaussian_idx + 1];
 			const float conic_x = conic_opacity[4 * gaussian_idx];
@@ -143,13 +181,27 @@ void BACKWARD::render_cpu(
 			float register_opacity = 0.0f;
 			std::array<float, kChannels> register_colors{};
 
+			// PROFILE_SECTION: Pixel eligibility check
 			for (int local_pixel = 0; local_pixel < kBlockSize; ++local_pixel)
 			{
 				if (!valid_pixel[local_pixel])
+				{
+					if (profile)
+						++profile->skipped_invalid_pixel;
 					continue;
+				}
 				if (splat_idx_in_tile >= static_cast<int>(last_contributor[local_pixel]))
+				{
+					if (profile)
+						++profile->skipped_last_contributor;
 					continue;
+				}
+				if (profile)
+					++profile->pixel_checks_passed;
 
+				// PROFILE_SECTION: Gaussian exponent
+				if (profile)
+					++profile->power_evaluations;
 				const int pixel_id = pixel_ids[local_pixel];
 				const int pixel_x = pixel_id % W;
 				const int pixel_y = pixel_id / W;
@@ -158,13 +210,31 @@ void BACKWARD::render_cpu(
 				const float power =
 					-0.5f * (conic_x * dx * dx + conic_z * dy * dy) - conic_y * dx * dy;
 				if (power > 0.0f)
+				{
+					if (profile)
+						++profile->skipped_power;
 					continue;
+				}
 
+				// PROFILE_SECTION: Gaussian weight
+				if (profile)
+					++profile->exp_evaluations;
 				const float gaussian = std::exp(power);
-				const float alpha = std::min(0.99f, opacity * gaussian);
-				if (alpha < 1.0f / 255.0f)
-					continue;
 
+				// PROFILE_SECTION: Alpha calculation
+				const float alpha = std::min(0.99f, opacity * gaussian);
+
+				// PROFILE_SECTION: Alpha threshold
+				if (alpha < 1.0f / 255.0f)
+				{
+					if (profile)
+						++profile->skipped_alpha;
+					continue;
+				}
+				if (profile)
+					++profile->gradient_evaluations;
+
+				// PROFILE_SECTION: Foreground alpha gradient
 				float& T = transmittance[local_pixel];
 				const float dchannel_dcolor = alpha * T;
 				const float one_minus_alpha_reciprocal = 1.0f / (1.0f - alpha);
@@ -176,19 +246,24 @@ void BACKWARD::render_cpu(
 					float& ar = accumulated_remainder[channel][local_pixel];
 					ar += dchannel_dcolor * color;
 					const float dL_dchannel = pixel_gradients[channel][local_pixel];
+					// PROFILE_SECTION: Color gradient
 					register_colors[channel] += dchannel_dcolor * dL_dchannel;
+					// PROFILE_SECTION: Foreground alpha gradient
 					dL_dalpha +=
 						(color * T + one_minus_alpha_reciprocal * ar) * dL_dchannel;
 				}
 
+				// PROFILE_SECTION: Background alpha gradient
 				float bg_dot_dpixel = 0.0f;
 				for (int channel = 0; channel < kChannels; ++channel)
 					bg_dot_dpixel += bg_color[channel] * pixel_gradients[channel][local_pixel];
 				dL_dalpha +=
 					(-final_transmittance[local_pixel] * one_minus_alpha_reciprocal) *
 					bg_dot_dpixel;
+				// PROFILE_SECTION: Transmittance update
 				T *= 1.0f - alpha;
 
+				// PROFILE_SECTION: Mean gradient
 				const float dL_dG = opacity * dL_dalpha;
 				const float gdx = gaussian * dx;
 				const float gdy = gaussian * dy;
@@ -197,12 +272,14 @@ void BACKWARD::render_cpu(
 
 				register_mean_x += dL_dG * dG_ddelx * ddelx_dx;
 				register_mean_y += dL_dG * dG_ddely * ddely_dy;
+				// PROFILE_SECTION: Conic / opacity gradient
 				register_conic_x += -0.5f * gdx * dx * dL_dG;
 				register_conic_y += -0.5f * gdx * dy * dL_dG;
 				register_conic_w += -0.5f * gdy * dy * dL_dG;
 				register_opacity += gaussian * dL_dalpha;
 			}
 
+			// PROFILE_SECTION: Output accumulation
 			// A Gaussian may occur in several tiles. Sequential execution makes
 			// normal additions sufficient; CUDA atomics are not needed here.
 			dL_dmean2D[3 * gaussian_idx] += register_mean_x;

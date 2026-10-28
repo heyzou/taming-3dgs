@@ -12,6 +12,7 @@
 #include "backward.h"
 #include "backward_cpu.h"
 #include "auxiliary.h"
+#include <chrono>
 #include <stdexcept>
 #include <vector>
 #include <cooperative_groups.h>
@@ -941,6 +942,11 @@ void BACKWARD::render(
 	(void)block;
 	const int num_tiles = static_cast<int>(grid.x * grid.y);
 	const std::size_t image_size = static_cast<std::size_t>(W) * H;
+	using Clock = std::chrono::steady_clock;
+	const bool profile_enabled = BACKWARD::cpu_profile_enabled();
+	CpuRenderProfile profile;
+	const auto total_start = profile_enabled ? Clock::now() : Clock::time_point{};
+	const auto d2h_start = total_start;
 
 	// The forward pass stores all render state in CUDA buffers. Copy only the
 	// arrays needed by render backward to host memory, run the per-Gaussian
@@ -973,13 +979,19 @@ void BACKWARD::render(
 		pixel_colors, image_size * NUM_CHAFFELS);
 	const std::vector<float> host_dL_dpixels = copy_from_device(
 		dL_dpixels, image_size * NUM_CHAFFELS);
+	if (profile_enabled)
+		profile.d2h_ms = std::chrono::duration<double, std::milli>(Clock::now() - d2h_start).count();
 
+	const auto host_init_start = profile_enabled ? Clock::now() : Clock::time_point{};
 	std::vector<float> host_dL_dmean2D(static_cast<std::size_t>(P) * 3, 0.0f);
 	std::vector<float> host_dL_dconic2D(static_cast<std::size_t>(P) * 4, 0.0f);
 	std::vector<float> host_dL_dopacity(static_cast<std::size_t>(P), 0.0f);
 	std::vector<float> host_dL_dcolors(
 		static_cast<std::size_t>(P) * NUM_CHAFFELS, 0.0f);
+	if (profile_enabled)
+		profile.host_init_ms = std::chrono::duration<double, std::milli>(Clock::now() - host_init_start).count();
 
+	const auto render_cpu_start = profile_enabled ? Clock::now() : Clock::time_point{};
 	BACKWARD::render_cpu(
 		host_ranges.data(),
 		host_point_list.data(),
@@ -1000,10 +1012,21 @@ void BACKWARD::render(
 		host_dL_dmean2D.data(),
 		host_dL_dconic2D.data(),
 		host_dL_dopacity.data(),
-		host_dL_dcolors.data());
+		host_dL_dcolors.data(),
+		profile_enabled ? &profile : nullptr);
+	if (profile_enabled)
+		profile.render_cpu_ms = std::chrono::duration<double, std::milli>(Clock::now() - render_cpu_start).count();
 
+	const auto h2d_start = profile_enabled ? Clock::now() : Clock::time_point{};
 	copy_to_device(reinterpret_cast<float *>(dL_dmean2D), host_dL_dmean2D);
 	copy_to_device(reinterpret_cast<float *>(dL_dconic2D), host_dL_dconic2D);
 	copy_to_device(dL_dopacity, host_dL_dopacity);
 	copy_to_device(dL_dcolors, host_dL_dcolors);
+	if (profile_enabled)
+	{
+		const auto end = Clock::now();
+		profile.h2d_ms = std::chrono::duration<double, std::milli>(end - h2d_start).count();
+		profile.total_ms = std::chrono::duration<double, std::milli>(end - total_start).count();
+		BACKWARD::store_cpu_profile(profile);
+	}
 }

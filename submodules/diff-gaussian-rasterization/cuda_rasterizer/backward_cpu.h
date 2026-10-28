@@ -14,6 +14,32 @@
 
 namespace BACKWARD
 {
+	struct CpuRenderProfile
+	{
+		double d2h_ms = 0.0;
+		double host_init_ms = 0.0;
+		double render_cpu_ms = 0.0;
+		double h2d_ms = 0.0;
+		double total_ms = 0.0;
+		std::uint64_t buckets = 0;
+		std::uint64_t buckets_skipped = 0;
+		std::uint64_t splats = 0;
+		std::uint64_t gaussian_pixel_tests = 0;
+		std::uint64_t skipped_invalid_pixel = 0;
+		std::uint64_t skipped_last_contributor = 0;
+		std::uint64_t pixel_checks_passed = 0;
+		std::uint64_t power_evaluations = 0;
+		std::uint64_t skipped_power = 0;
+		std::uint64_t exp_evaluations = 0;
+		std::uint64_t skipped_alpha = 0;
+		std::uint64_t gradient_evaluations = 0;
+	};
+
+	void set_cpu_profile_enabled(bool enabled);
+	bool cpu_profile_enabled();
+	CpuRenderProfile get_cpu_profile();
+	void store_cpu_profile(const CpuRenderProfile& profile);
+
 	// Sequential CPU implementation of the per-Gaussian rendering backward
 	// pass. All pointers passed to this function must refer to host memory.
 	void render_cpu(
@@ -36,7 +62,8 @@ namespace BACKWARD
 		float* dL_dmean2D,
 		float* dL_dconic2D,
 		float* dL_dopacity,
-		float* dL_dcolors);
+		float* dL_dcolors,
+		CpuRenderProfile* profile = nullptr);
 }
 
 #endif

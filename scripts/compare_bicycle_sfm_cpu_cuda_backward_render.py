@@ -28,6 +28,7 @@ def make_pipeline():
         compute_cov3D_python=False,
         cpu_backward_render=True,
         compare_cpu_cuda_backward_render=True,
+        profile_cpu_backward_render=False,
         debug=False,
     )
 

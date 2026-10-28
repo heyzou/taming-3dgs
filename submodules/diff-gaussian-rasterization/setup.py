@@ -28,7 +28,9 @@ setup(
             "cuda_rasterizer/adam.cu",
             "rasterize_points.cu",
             "ext.cpp"],
-            extra_compile_args={"cxx": [],"nvcc": ["-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")]})
+            # Keep release optimization while adding source-line information
+            # for Nsight Systems CPU sampling of backward_cpu.cpp.
+            extra_compile_args={"cxx": ["-O3", "-g"],"nvcc": ["-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")]})
         ],
     cmdclass={
         'build_ext': BuildExtension
