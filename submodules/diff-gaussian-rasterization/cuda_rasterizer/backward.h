@@ -24,7 +24,7 @@ namespace BACKWARD
 		const dim3 grid, dim3 block,
 		const uint2* ranges,
 		const uint32_t* point_list,
-		int W, int H, int R, int B,
+		int P, int W, int H, int R, int B,
 		const uint32_t* per_bucket_tile_offset,
 		const uint32_t* bucket_to_tile,
 		const float* sampled_T, const float* sampled_ar,
@@ -40,7 +40,8 @@ namespace BACKWARD
 		float3* dL_dmean2D,
 		float4* dL_dconic2D,
 		float* dL_dopacity,
-		float* dL_dcolors);
+		float* dL_dcolors,
+		bool use_cpu);
 
 	void preprocess(
 		int P, int D, int M,

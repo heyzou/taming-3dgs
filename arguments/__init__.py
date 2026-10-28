@@ -67,6 +67,8 @@ class PipelineParams(ParamGroup):
         self.separate_sh = True
         self.convert_SHs_python = False
         self.compute_cov3D_python = False
+        self.cpu_backward_render = False
+        self.compare_cpu_cuda_backward_render = False
         self.debug = False
         super().__init__(parser, "Pipeline Parameters")
 

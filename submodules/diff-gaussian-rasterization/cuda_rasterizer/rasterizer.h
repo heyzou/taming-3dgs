@@ -99,6 +99,7 @@ namespace CudaRasterizer
 			float* dL_dsh,
 			float* dL_dscale,
 			float* dL_drot,
+			bool use_cpu_backward_render,
 			bool debug);
 
 		static void set_backward_timing_enabled(bool enabled);

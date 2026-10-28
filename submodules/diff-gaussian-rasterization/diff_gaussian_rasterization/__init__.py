@@ -16,6 +16,28 @@ from . import _C
 from utils.backward_timing import enabled, record_cuda_interval
 
 
+_last_backward_render_comparison = None
+
+
+def get_last_backward_render_comparison():
+    return _last_backward_render_comparison
+
+
+def _compare_backward_render_tensor(cuda_tensor, cpu_tensor):
+    cuda_value = cuda_tensor.detach().cpu()
+    cpu_value = cpu_tensor.detach().cpu()
+    difference = (cpu_value - cuda_value).abs()
+    return {
+        "cuda": cuda_value,
+        "cpu": cpu_value,
+        "absolute_difference": difference,
+        "exact_equal": torch.equal(cpu_value, cuda_value),
+        "different_elements": torch.count_nonzero(cpu_value != cuda_value).item(),
+        "max_absolute_difference": difference.max().item() if difference.numel() else 0.0,
+        "mean_absolute_difference": difference.mean().item() if difference.numel() else 0.0,
+    }
+
+
 def get_last_backward_timing():
     if not enabled():
         return 0.0, 0.0
@@ -117,6 +139,9 @@ class _RasterizeGaussians(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_out_color, _, dumy, wumy, pumy, fumy, g_center, g_depth, g_radii, g_weights, g_count, g_blend, g_dist):
 
+        global _last_backward_render_comparison
+        _last_backward_render_comparison = None
+
         # Restore necessary values from context
         num_rendered = ctx.num_rendered
         num_buckets = ctx.num_buckets
@@ -124,7 +149,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, dc, sh, geomBuffer, binningBuffer, imgBuffer, sampleBuffer = ctx.saved_tensors
 
         # Restructure args as C++ method expects them
-        args = (raster_settings.bg,
+        common_args = (raster_settings.bg,
                 means3D, 
                 radii, 
                 colors_precomp, 
@@ -146,16 +171,37 @@ class _RasterizeGaussians(torch.autograd.Function):
                 binningBuffer,
                 imgBuffer,
                 num_buckets,
-                sampleBuffer,
-                raster_settings.debug)
+                sampleBuffer)
+
+        def run_native_backward(use_cpu):
+            return _C.rasterize_gaussians_backward(
+                *common_args,
+                use_cpu,
+                raster_settings.debug,
+            )
 
         # Compute gradients for relevant tensors by invoking backward method
-        if raster_settings.debug:
+        if raster_settings.compare_cpu_cuda_backward_render:
+            _C.set_backward_timing_enabled(False)
+            cuda_outputs = run_native_backward(False)
+            cpu_outputs = run_native_backward(True)
+            _last_backward_render_comparison = {
+                "dL_dmean2D": _compare_backward_render_tensor(cuda_outputs[0], cpu_outputs[0]),
+                "dL_dcolors": _compare_backward_render_tensor(cuda_outputs[1], cpu_outputs[1]),
+                "dL_dopacity": _compare_backward_render_tensor(cuda_outputs[2], cpu_outputs[2]),
+                "dL_dconic2D": _compare_backward_render_tensor(cuda_outputs[9], cpu_outputs[9]),
+            }
+            outputs = cpu_outputs
+        elif raster_settings.debug:
+            args = common_args + (
+                raster_settings.cpu_backward_render,
+                raster_settings.debug,
+            )
             cpu_args = cpu_deep_copy_tuple(args) # Copy them before they can be corrupted
             try:
                 _C.set_backward_timing_enabled(enabled())
                 # Measure only the Gaussian Rasterizer CUDA backward interval.
-                grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_dc, grad_sh, grad_scales, grad_rotations = record_cuda_interval(
+                outputs = record_cuda_interval(
                     "rasterizer_backward",
                     _C.rasterize_gaussians_backward,
                     *args,
@@ -167,11 +213,13 @@ class _RasterizeGaussians(torch.autograd.Function):
         else:
              _C.set_backward_timing_enabled(enabled())
              # Measure only the Gaussian Rasterizer CUDA backward interval.
-             grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_dc, grad_sh, grad_scales, grad_rotations = record_cuda_interval(
+             outputs = record_cuda_interval(
                  "rasterizer_backward",
-                 _C.rasterize_gaussians_backward,
-                 *args,
+                 run_native_backward,
+                 raster_settings.cpu_backward_render,
              )
+
+        grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_dc, grad_sh, grad_scales, grad_rotations, _ = outputs
 
         grads = (
             grad_means3D,
@@ -200,6 +248,8 @@ class GaussianRasterizationSettings(NamedTuple):
     sh_degree : int
     campos : torch.Tensor
     prefiltered : bool
+    cpu_backward_render : bool
+    compare_cpu_cuda_backward_render : bool
     debug : bool
     pixel_weights : torch.Tensor
 

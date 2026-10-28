@@ -248,7 +248,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             np.save(os.path.join(args.benchmark_dir, "rasterizer_render_backward.npy"), np.array(time_taken["rasterizer_render_backward"]))
             np.save(os.path.join(args.benchmark_dir, "rasterizer_preprocess_backward.npy"), np.array(time_taken["rasterizer_preprocess_backward"]))
             np.save(os.path.join(args.benchmark_dir, "step.npy"), np.array(time_taken["step"]))
-
     end = time.time()
     scene.save(iteration)
     print(f"Time taken by {os.getenv('OAR_JOB_ID')}: {end - start}s")

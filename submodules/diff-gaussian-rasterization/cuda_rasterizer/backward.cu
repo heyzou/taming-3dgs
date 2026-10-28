@@ -10,10 +10,45 @@
  */
 
 #include "backward.h"
+#include "backward_cpu.h"
 #include "auxiliary.h"
+#include <stdexcept>
+#include <vector>
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 namespace cg = cooperative_groups;
+
+namespace
+{
+	template <typename T>
+	std::vector<T> copy_from_device(const T *device_ptr, std::size_t count)
+	{
+		std::vector<T> host_values(count);
+		if (count == 0)
+			return host_values;
+
+		const cudaError_t status = cudaMemcpy(
+			host_values.data(), device_ptr, count * sizeof(T), cudaMemcpyDeviceToHost);
+		if (status != cudaSuccess)
+			throw std::runtime_error(cudaGetErrorString(status));
+		return host_values;
+	}
+
+	template <typename T>
+	void copy_to_device(T *device_ptr, const std::vector<T> &host_values)
+	{
+		if (host_values.empty())
+			return;
+
+		const cudaError_t status = cudaMemcpy(
+			device_ptr,
+			host_values.data(),
+			host_values.size() * sizeof(T),
+			cudaMemcpyHostToDevice);
+		if (status != cudaSuccess)
+			throw std::runtime_error(cudaGetErrorString(status));
+	}
+}
 
 // Backward pass for conversion of spherical harmonics to RGB for
 // each Gaussian.
@@ -24,7 +59,6 @@ __device__ void computeColorFromSH(int idx, int deg, int max_coeffs, const glm::
 	glm::vec3 dir_orig = pos - campos;
 	glm::vec3 dir = dir_orig / glm::length(dir_orig);
 
-	glm::vec3 *direct_color = ((glm::vec3 *)dc) + idx;
 	glm::vec3 *sh = ((glm::vec3 *)shs) + idx * max_coeffs;
 
 	// Use PyTorch rule for clamping: if clamping was applied,
@@ -859,7 +893,7 @@ void BACKWARD::render(
 	const dim3 grid, dim3 block,
 	const uint2 *ranges,
 	const uint32_t *point_list,
-	int W, int H, int R, int B,
+	int P, int W, int H, int R, int B,
 	const uint32_t *per_bucket_tile_offset,
 	const uint32_t *bucket_to_tile,
 	const float *sampled_T, const float *sampled_ar,
@@ -875,27 +909,101 @@ void BACKWARD::render(
 	float3 *dL_dmean2D,
 	float4 *dL_dconic2D,
 	float *dL_dopacity,
-	float *dL_dcolors)
+	float *dL_dcolors,
+	bool use_cpu)
 {
-	const int THREADS = 32;
-	PerGaussianRenderCUDA<NUM_CHAFFELS><<<((B * 32) + THREADS - 1) / THREADS, THREADS>>>(
-		ranges,
-		point_list,
-		W, H, B,
-		per_bucket_tile_offset,
-		bucket_to_tile,
-		sampled_T, sampled_ar,
-		bg_color,
-		means2D,
-		conic_opacity,
-		colors,
-		final_Ts,
-		n_contrib,
-		max_contrib,
-		pixel_colors,
-		dL_dpixels,
-		dL_dmean2D,
-		dL_dconic2D,
-		dL_dopacity,
-		dL_dcolors);
+	if (!use_cpu)
+	{
+		const int threads = 32;
+		PerGaussianRenderCUDA<NUM_CHAFFELS><<<((B * 32) + threads - 1) / threads, threads>>>(
+			ranges,
+			point_list,
+			W, H, B,
+			per_bucket_tile_offset,
+			bucket_to_tile,
+			sampled_T, sampled_ar,
+			bg_color,
+			means2D,
+			conic_opacity,
+			colors,
+			final_Ts,
+			n_contrib,
+			max_contrib,
+			pixel_colors,
+			dL_dpixels,
+			dL_dmean2D,
+			dL_dconic2D,
+			dL_dopacity,
+			dL_dcolors);
+		return;
+	}
+
+	(void)block;
+	const int num_tiles = static_cast<int>(grid.x * grid.y);
+	const std::size_t image_size = static_cast<std::size_t>(W) * H;
+
+	// The forward pass stores all render state in CUDA buffers. Copy only the
+	// arrays needed by render backward to host memory, run the per-Gaussian
+	// algorithm sequentially, then return its gradients for CUDA preprocess.
+	const std::vector<uint32_t> host_ranges = copy_from_device(
+		reinterpret_cast<const uint32_t *>(ranges), static_cast<std::size_t>(num_tiles) * 2);
+	const std::vector<uint32_t> host_point_list = copy_from_device(
+		point_list, static_cast<std::size_t>(R));
+	const std::vector<uint32_t> host_bucket_offsets = copy_from_device(
+		per_bucket_tile_offset, static_cast<std::size_t>(num_tiles));
+	const std::vector<uint32_t> host_bucket_to_tile = copy_from_device(
+		bucket_to_tile, static_cast<std::size_t>(B));
+	const std::vector<float> host_sampled_T = copy_from_device(
+		sampled_T, static_cast<std::size_t>(B) * BLOCK_SIZE);
+	const std::vector<float> host_sampled_ar = copy_from_device(
+		sampled_ar, static_cast<std::size_t>(B) * BLOCK_SIZE * NUM_CHAFFELS);
+	const std::vector<float> host_bg_color = copy_from_device(
+		bg_color, static_cast<std::size_t>(NUM_CHAFFELS));
+	const std::vector<float> host_means2D = copy_from_device(
+		reinterpret_cast<const float *>(means2D), static_cast<std::size_t>(P) * 2);
+	const std::vector<float> host_conic_opacity = copy_from_device(
+		reinterpret_cast<const float *>(conic_opacity), static_cast<std::size_t>(P) * 4);
+	const std::vector<float> host_colors = copy_from_device(
+		colors, static_cast<std::size_t>(P) * NUM_CHAFFELS);
+	const std::vector<float> host_final_Ts = copy_from_device(final_Ts, image_size);
+	const std::vector<uint32_t> host_n_contrib = copy_from_device(n_contrib, image_size);
+	const std::vector<uint32_t> host_max_contrib = copy_from_device(
+		max_contrib, static_cast<std::size_t>(num_tiles));
+	const std::vector<float> host_pixel_colors = copy_from_device(
+		pixel_colors, image_size * NUM_CHAFFELS);
+	const std::vector<float> host_dL_dpixels = copy_from_device(
+		dL_dpixels, image_size * NUM_CHAFFELS);
+
+	std::vector<float> host_dL_dmean2D(static_cast<std::size_t>(P) * 3, 0.0f);
+	std::vector<float> host_dL_dconic2D(static_cast<std::size_t>(P) * 4, 0.0f);
+	std::vector<float> host_dL_dopacity(static_cast<std::size_t>(P), 0.0f);
+	std::vector<float> host_dL_dcolors(
+		static_cast<std::size_t>(P) * NUM_CHAFFELS, 0.0f);
+
+	BACKWARD::render_cpu(
+		host_ranges.data(),
+		host_point_list.data(),
+		P, W, H, B, num_tiles,
+		host_bucket_offsets.data(),
+		host_bucket_to_tile.data(),
+		host_sampled_T.data(),
+		host_sampled_ar.data(),
+		host_bg_color.data(),
+		host_means2D.data(),
+		host_conic_opacity.data(),
+		host_colors.data(),
+		host_final_Ts.data(),
+		host_n_contrib.data(),
+		host_max_contrib.data(),
+		host_pixel_colors.data(),
+		host_dL_dpixels.data(),
+		host_dL_dmean2D.data(),
+		host_dL_dconic2D.data(),
+		host_dL_dopacity.data(),
+		host_dL_dcolors.data());
+
+	copy_to_device(reinterpret_cast<float *>(dL_dmean2D), host_dL_dmean2D);
+	copy_to_device(reinterpret_cast<float *>(dL_dconic2D), host_dL_dconic2D);
+	copy_to_device(dL_dopacity, host_dL_dopacity);
+	copy_to_device(dL_dcolors, host_dL_dcolors);
 }

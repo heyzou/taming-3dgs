@@ -128,16 +128,16 @@ RasterizeGaussiansCUDA(
 
 	if(pixel_weights.size(0) > 1)
 	{
-		weight_ptr = pixel_weights.contiguous().data<float>();
+		weight_ptr = pixel_weights.contiguous().data_ptr<float>();
 		accumWeightsBuffer = torch::full({P}, 0, float_opts);
-		accum_weight_ptr = accumWeightsBuffer.contiguous().data<float>();
+		accum_weight_ptr = accumWeightsBuffer.contiguous().data_ptr<float>();
 
 		reverseCount = torch::full({P}, 0, int_opts);
-		reverse_count_ptr = reverseCount.contiguous().data<int>();
+		reverse_count_ptr = reverseCount.contiguous().data_ptr<int>();
 		blendingWeights = torch::full({P}, 0, float_opts);
-		blending_weight_ptr = blendingWeights.contiguous().data<float>();
+		blending_weight_ptr = blendingWeights.contiguous().data_ptr<float>();
 		distAccum = torch::full({P}, 0, float_opts);
-		dist_accum_ptr = distAccum.contiguous().data<float>();
+		dist_accum_ptr = distAccum.contiguous().data_ptr<float>();
 	}
   }
   
@@ -165,25 +165,25 @@ RasterizeGaussiansCUDA(
 		countBuffer.contiguous().data_ptr<int>(),
 		offsetBuffer.contiguous().data_ptr<int>(),
 	    P, degree, M,
-		background.contiguous().data<float>(),
+		background.contiguous().data_ptr<float>(),
 		W, H,
-		means3D.contiguous().data<float>(),
+		means3D.contiguous().data_ptr<float>(),
 		dc.contiguous().data_ptr<float>(),
 		sh.contiguous().data_ptr<float>(),
-		colors.contiguous().data<float>(), 
-		opacity.contiguous().data<float>(), 
+		colors.contiguous().data_ptr<float>(),
+		opacity.contiguous().data_ptr<float>(),
 		scales.contiguous().data_ptr<float>(),
 		scale_modifier,
 		rotations.contiguous().data_ptr<float>(),
-		cov3D_precomp.contiguous().data<float>(), 
-		viewmatrix.contiguous().data<float>(), 
-		projmatrix.contiguous().data<float>(),
-		campos.contiguous().data<float>(),
+		cov3D_precomp.contiguous().data_ptr<float>(),
+		viewmatrix.contiguous().data_ptr<float>(),
+		projmatrix.contiguous().data_ptr<float>(),
+		campos.contiguous().data_ptr<float>(),
 		tan_fovx,
 		tan_fovy,
 		prefiltered,
-		out_color.contiguous().data<float>(),
-		radii.contiguous().data<int>(),
+		out_color.contiguous().data_ptr<float>(),
+		radii.contiguous().data_ptr<int>(),
 		debug,
 		weight_ptr,
 		accum_weight_ptr,
@@ -197,7 +197,7 @@ RasterizeGaussiansCUDA(
   return std::make_tuple(rendered, num_buckets, out_color, radii, geomBuffer, binningBuffer, imgBuffer, sampleBuffer, offsetBuffer, listBuffer, listBufferRender, listBufferDistance, xy_d, depths_d, radii_d, accumWeightsBuffer, reverseCount, blendingWeights, distAccum);
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
  RasterizeGaussiansBackwardCUDA(
  	const torch::Tensor& background,
 	const torch::Tensor& means3D,
@@ -222,6 +222,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	const torch::Tensor& imageBuffer,
 	const int B,
 	const torch::Tensor& sampleBuffer,
+	const bool use_cpu_backward_render,
 	const bool debug) 
 {
   const int P = means3D.size(0);
@@ -248,41 +249,42 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
   if(P != 0)
   {  
 	  CudaRasterizer::Rasterizer::backward(P, degree, M, R, B,
-	  background.contiguous().data<float>(),
+	  background.contiguous().data_ptr<float>(),
 	  W, H, 
-	  means3D.contiguous().data<float>(),
-	  dc.contiguous().data<float>(),
-	  sh.contiguous().data<float>(),
-	  colors.contiguous().data<float>(),
+	  means3D.contiguous().data_ptr<float>(),
+	  dc.contiguous().data_ptr<float>(),
+	  sh.contiguous().data_ptr<float>(),
+	  colors.contiguous().data_ptr<float>(),
 	  scales.data_ptr<float>(),
 	  scale_modifier,
 	  rotations.data_ptr<float>(),
-	  cov3D_precomp.contiguous().data<float>(),
-	  viewmatrix.contiguous().data<float>(),
-	  projmatrix.contiguous().data<float>(),
-	  campos.contiguous().data<float>(),
+	  cov3D_precomp.contiguous().data_ptr<float>(),
+	  viewmatrix.contiguous().data_ptr<float>(),
+	  projmatrix.contiguous().data_ptr<float>(),
+	  campos.contiguous().data_ptr<float>(),
 	  tan_fovx,
 	  tan_fovy,
-	  radii.contiguous().data<int>(),
+	  radii.contiguous().data_ptr<int>(),
 	  reinterpret_cast<char*>(geomBuffer.contiguous().data_ptr()),
 	  reinterpret_cast<char*>(binningBuffer.contiguous().data_ptr()),
 	  reinterpret_cast<char*>(imageBuffer.contiguous().data_ptr()),
 	  reinterpret_cast<char*>(sampleBuffer.contiguous().data_ptr()),
-	  dL_dout_color.contiguous().data<float>(),
-	  dL_dmeans2D.contiguous().data<float>(),
-	  dL_dconic.contiguous().data<float>(),  
-	  dL_dopacity.contiguous().data<float>(),
-	  dL_dcolors.contiguous().data<float>(),
-	  dL_dmeans3D.contiguous().data<float>(),
-	  dL_dcov3D.contiguous().data<float>(),
-	  dL_ddc.contiguous().data<float>(),
-	  dL_dsh.contiguous().data<float>(),
-	  dL_dscales.contiguous().data<float>(),
-	  dL_drotations.contiguous().data<float>(),
+	  dL_dout_color.contiguous().data_ptr<float>(),
+	  dL_dmeans2D.contiguous().data_ptr<float>(),
+	  dL_dconic.contiguous().data_ptr<float>(),
+	  dL_dopacity.contiguous().data_ptr<float>(),
+	  dL_dcolors.contiguous().data_ptr<float>(),
+	  dL_dmeans3D.contiguous().data_ptr<float>(),
+	  dL_dcov3D.contiguous().data_ptr<float>(),
+	  dL_ddc.contiguous().data_ptr<float>(),
+	  dL_dsh.contiguous().data_ptr<float>(),
+	  dL_dscales.contiguous().data_ptr<float>(),
+	  dL_drotations.contiguous().data_ptr<float>(),
+	  use_cpu_backward_render,
 	  debug);
   }
 
-  return std::make_tuple(dL_dmeans2D, dL_dcolors, dL_dopacity, dL_dmeans3D, dL_dcov3D, dL_ddc, dL_dsh, dL_dscales, dL_drotations);
+  return std::make_tuple(dL_dmeans2D, dL_dcolors, dL_dopacity, dL_dmeans3D, dL_dcov3D, dL_ddc, dL_dsh, dL_dscales, dL_drotations, dL_dconic);
 }
 
 torch::Tensor markVisible(
@@ -297,10 +299,10 @@ torch::Tensor markVisible(
   if(P != 0)
   {
 	CudaRasterizer::Rasterizer::markVisible(P,
-		means3D.contiguous().data<float>(),
-		viewmatrix.contiguous().data<float>(),
-		projmatrix.contiguous().data<float>(),
-		present.contiguous().data<bool>());
+		means3D.contiguous().data_ptr<float>(),
+		viewmatrix.contiguous().data_ptr<float>(),
+		projmatrix.contiguous().data_ptr<float>(),
+		present.contiguous().data_ptr<bool>());
   }
   
   return present;
@@ -320,11 +322,11 @@ void adamUpdate(
 	const uint32_t M
 ){
 	ADAM::adamUpdate(
-		param.contiguous().data<float>(),
-		param_grad.contiguous().data<float>(),
-		exp_avg.contiguous().data<float>(),
-		exp_avg_sq.contiguous().data<float>(),
-		visible.contiguous().data<bool>(),
+		param.contiguous().data_ptr<float>(),
+		param_grad.contiguous().data_ptr<float>(),
+		exp_avg.contiguous().data_ptr<float>(),
+		exp_avg_sq.contiguous().data_ptr<float>(),
+		visible.contiguous().data_ptr<bool>(),
 		lr,
 		b1,
 		b2,

@@ -303,8 +303,8 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char*& chunk, s
 	obtain(chunk, img.accum_alpha, N, 128);
 	obtain(chunk, img.n_contrib, N, 128);
 	obtain(chunk, img.ranges, N, 128);
-	int* dummy;
-	int* wummy;
+	int* dummy = nullptr;
+	int* wummy = nullptr;
 	cub::DeviceScan::InclusiveSum(nullptr, img.scan_size, dummy, wummy, N);
 	obtain(chunk, img.contrib_scan, img.scan_size, 128);
 
@@ -580,6 +580,7 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dsh,
 	float* dL_dscale,
 	float* dL_drot,
+	bool use_cpu_backward_render,
 	bool debug)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
@@ -615,7 +616,7 @@ void CudaRasterizer::Rasterizer::backward(
 		block,
 		imgState.ranges,
 		binningState.point_list,
-		width, height, R, B,
+		P, width, height, R, B,
 		imgState.bucket_offsets,
 		sampleState.bucket_to_tile,
 		sampleState.T,
@@ -632,7 +633,8 @@ void CudaRasterizer::Rasterizer::backward(
 		(float3*)dL_dmean2D,
 		(float4*)dL_dconic,
 		dL_dopacity,
-		dL_dcolor), debug)
+		dL_dcolor,
+		use_cpu_backward_render), debug)
 	if (backward_timing_enabled)
 		cudaEventRecord(render_end_event);
 
