@@ -1,0 +1,11 @@
+section,samples,percent
+Alpha / threshold,26982,43.197
+Power,14845,23.766
+Color / alpha gradients,6025,9.646
+Exp / Gaussian evaluation,4569,7.315
+Geometry gradients,3098,4.960
+Pixel check,3030,4.851
+Bucket / pixel setup,1384,2.216
+Other,1019,1.631
+Output accumulation,854,1.367
+Gaussian load / init,657,1.052

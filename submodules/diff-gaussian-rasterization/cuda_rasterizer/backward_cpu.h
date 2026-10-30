@@ -10,10 +10,34 @@
 #ifndef CUDA_RASTERIZER_BACKWARD_CPU_H_INCLUDED
 #define CUDA_RASTERIZER_BACKWARD_CPU_H_INCLUDED
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace BACKWARD
 {
+	enum class CpuRenderSection : std::size_t
+	{
+		TilePixelPreparation,
+		GaussianPreparation,
+		PixelEligibilityCheck,
+		GaussianExponent,
+		GaussianWeight,
+		AlphaCalculation,
+		AlphaThreshold,
+		ColorGradient,
+		ForegroundAlphaGradient,
+		BackgroundAlphaGradient,
+		TransmittanceUpdate,
+		MeanGradient,
+		ConicOpacityGradient,
+		OutputAccumulation,
+		Count
+	};
+
+	constexpr std::size_t kCpuRenderSectionCount =
+		static_cast<std::size_t>(CpuRenderSection::Count);
+
 	struct CpuRenderProfile
 	{
 		double d2h_ms = 0.0;
@@ -33,7 +57,15 @@ namespace BACKWARD
 		std::uint64_t exp_evaluations = 0;
 		std::uint64_t skipped_alpha = 0;
 		std::uint64_t gradient_evaluations = 0;
+		std::array<std::uint64_t, kCpuRenderSectionCount> section_ticks{};
+		std::array<std::uint64_t, kCpuRenderSectionCount> section_intervals{};
+		std::array<std::uint64_t, kCpuRenderSectionCount> section_zero_tick_intervals{};
+		double timer_overhead_ticks = 0.0;
+		double timer_full_overhead_ticks = 0.0;
+		std::uint64_t timer_frequency_hz = 0;
 	};
+
+	const char* cpu_render_section_name(CpuRenderSection section);
 
 	void set_cpu_profile_enabled(bool enabled);
 	bool cpu_profile_enabled();

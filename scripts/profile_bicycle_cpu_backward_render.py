@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Profile sequential CPU BACKWARD::render on one full bicycle SfM scene."""
+"""Profile sequential CPU BACKWARD::render on one bicycle SfM image."""
 
 import argparse
 import csv
+import statistics
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -72,6 +73,14 @@ def main():
         "--output",
         default="results/bicycle_cpu_backward_render_profile.csv",
     )
+    parser.add_argument(
+        "--section-output",
+        default="results/bicycle_cpu_backward_render_sections_direct.csv",
+    )
+    parser.add_argument(
+        "--zero-tick-output",
+        default="results/bicycle_cpu_backward_render_zero_ticks.csv",
+    )
     args = parser.parse_args()
 
     torch.manual_seed(0)
@@ -110,13 +119,108 @@ def main():
     if profiles:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fieldnames = ["run"] + [key for key in profiles[0] if key != "run"]
+        fieldnames = [
+            "run",
+            *[key for key in profiles[0] if key not in ("run", "sections")],
+        ]
         with output_path.open("w", newline="") as output_file:
             writer = csv.DictWriter(
                 output_file, fieldnames=fieldnames, lineterminator="\n"
             )
             writer.writeheader()
-            writer.writerows(profiles)
+            writer.writerows(
+                {key: profile[key] for key in fieldnames} for profile in profiles
+            )
+
+        section_runs = {}
+        zero_tick_rows = []
+        for profile in profiles:
+            for section in profile["sections"]:
+                section_runs.setdefault(section["name"], []).append(section)
+                intervals = section["intervals"]
+                zero_ticks = section["zero_tick_intervals"]
+                zero_tick_rows.append(
+                    {
+                        "run": profile["run"],
+                        "section": section["name"],
+                        "intervals": intervals,
+                        "zero_tick_intervals": zero_ticks,
+                        "zero_tick_percent":
+                            100.0 * zero_ticks / intervals if intervals else 0.0,
+                    }
+                )
+
+        zero_tick_output_path = Path(args.zero_tick_output)
+        zero_tick_output_path.parent.mkdir(parents=True, exist_ok=True)
+        with zero_tick_output_path.open("w", newline="") as output_file:
+            writer = csv.DictWriter(
+                output_file,
+                fieldnames=(
+                    "run",
+                    "section",
+                    "intervals",
+                    "zero_tick_intervals",
+                    "zero_tick_percent",
+                ),
+                lineterminator="\n",
+            )
+            writer.writeheader()
+            writer.writerows(zero_tick_rows)
+
+        section_rows = []
+        for name, runs in section_runs.items():
+            section_rows.append(
+                {
+                    "section": name,
+                    "corrected_ms_median": statistics.median(
+                        run["corrected_ms"] for run in runs
+                    ),
+                    "raw_ms_median": statistics.median(
+                        run["raw_ms"] for run in runs
+                    ),
+                    "timer_overhead_ms_median": statistics.median(
+                        run["timer_overhead_ms"] for run in runs
+                    ),
+                    "intervals_median": statistics.median(
+                        run["intervals"] for run in runs
+                    ),
+                    "zero_tick_intervals_median": statistics.median(
+                        run["zero_tick_intervals"] for run in runs
+                    ),
+                    "corrected_ns_per_interval_median": statistics.median(
+                        run["corrected_ns_per_interval"] for run in runs
+                    ),
+                }
+            )
+        section_rows.sort(key=lambda row: row["corrected_ms_median"], reverse=True)
+        corrected_total = sum(row["corrected_ms_median"] for row in section_rows)
+        for rank, row in enumerate(section_rows, start=1):
+            row["rank"] = rank
+            row["share_percent"] = (
+                100.0 * row["corrected_ms_median"] / corrected_total
+                if corrected_total
+                else 0.0
+            )
+
+        section_output_path = Path(args.section_output)
+        section_output_path.parent.mkdir(parents=True, exist_ok=True)
+        section_fieldnames = [
+            "rank",
+            "section",
+            "corrected_ms_median",
+            "share_percent",
+            "raw_ms_median",
+            "timer_overhead_ms_median",
+            "intervals_median",
+            "zero_tick_intervals_median",
+            "corrected_ns_per_interval_median",
+        ]
+        with section_output_path.open("w", newline="") as output_file:
+            writer = csv.DictWriter(
+                output_file, fieldnames=section_fieldnames, lineterminator="\n"
+            )
+            writer.writeheader()
+            writer.writerows(section_rows)
 
         print(
             f"camera={camera.image_name} size={camera.image_width}x{camera.image_height} "
@@ -131,7 +235,36 @@ def main():
         ):
             values = torch.tensor([profile[key] for profile in profiles])
             print(f"{key:20s} median={values.median().item():.3f} ms")
+        timer_frequency_hz = statistics.median(
+            profile["timer_frequency_hz"] for profile in profiles
+        )
+        timer_overhead_ticks = statistics.median(
+            profile["timer_overhead_ticks"] for profile in profiles
+        )
+        timer_full_overhead_ticks = statistics.median(
+            profile["timer_full_overhead_ticks"] for profile in profiles
+        )
+        print(
+            "timer interval overhead "
+            f"median={timer_overhead_ticks:.6f} ticks "
+            f"({timer_overhead_ticks * 1.0e9 / timer_frequency_hz:.3f} ns)"
+        )
+        print(
+            "timer full overhead     "
+            f"median={timer_full_overhead_ticks:.6f} ticks "
+            f"({timer_full_overhead_ticks * 1.0e9 / timer_frequency_hz:.3f} ns)"
+        )
         print(f"profile CSV: {output_path}")
+        print("direct section timing (corrected median):")
+        for row in section_rows:
+            print(
+                f"{row['rank']:2d}. {row['section']:32s} "
+                f"{row['corrected_ms_median']:10.3f} ms "
+                f"({row['share_percent']:6.2f}%) "
+                f"zero ticks={row['zero_tick_intervals_median']:,.0f}"
+            )
+        print(f"direct section CSV: {section_output_path}")
+        print(f"zero tick counts CSV: {zero_tick_output_path}")
 
 
 if __name__ == "__main__":

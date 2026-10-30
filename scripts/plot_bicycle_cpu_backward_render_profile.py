@@ -29,6 +29,99 @@ def median(rows, key):
     return statistics.median(float(row[key]) for row in rows)
 
 
+def draw_filtering_chart(rows, output_path):
+    counters = {
+        key: int(statistics.median(int(row[key]) for row in rows))
+        for key in (
+            "gaussian_pixel_tests",
+            "skipped_invalid_pixel",
+            "skipped_last_contributor",
+            "skipped_power",
+            "gradient_evaluations",
+        )
+    }
+    initial = counters["gaussian_pixel_tests"]
+    valid = initial - counters["skipped_invalid_pixel"]
+    contributor = valid - counters["skipped_last_contributor"]
+    power = contributor - counters["skipped_power"]
+    gradient = counters["gradient_evaluations"]
+    stages = [
+        ("1. Gaussian x pixel candidates", initial, COLORS["blue"]),
+        ("2. Valid pixel passed", valid, "#0ea5e9"),
+        ("3. Last contributor passed", contributor, COLORS["cyan"]),
+        ("4. Power check passed", power, COLORS["orange"]),
+        ("5. Alpha threshold passed", gradient, COLORS["red"]),
+    ]
+
+    image = Image.new("RGB", (1900, 1080), "#f8fafc")
+    draw = ImageDraw.Draw(image)
+    draw.text(
+        (70, 45),
+        "Gaussian x pixel filtering flow",
+        font=font(48, True),
+        fill=COLORS["ink"],
+    )
+    draw.text(
+        (70, 108),
+        "bicycle / images_8 / remaining candidates after each check",
+        font=font(25),
+        fill=COLORS["gray"],
+    )
+    draw.text((1530, 175), "Remaining / initial", font=font(20, True), fill=COLORS["gray"])
+
+    bar_x = 550
+    bar_width = 930
+    previous = initial
+    for index, (label, count, color) in enumerate(stages):
+        y = 220 + index * 160
+        percentage = count / initial * 100.0
+        width = bar_width * count / initial
+        draw.text((70, y + 15), label, font=font(23, True), fill=COLORS["ink"])
+        draw.rounded_rectangle(
+            (bar_x, y, bar_x + bar_width, y + 64),
+            radius=12,
+            fill=COLORS["light"],
+        )
+        draw.rounded_rectangle(
+            (bar_x, y, bar_x + width, y + 64),
+            radius=12,
+            fill=color,
+        )
+        draw.text(
+            (1530, y + 3),
+            f"{count:,}",
+            font=font(27, True),
+            fill=COLORS["ink"],
+        )
+        draw.text(
+            (1530, y + 38),
+            f"{percentage:.2f}%",
+            font=font(20),
+            fill=COLORS["gray"],
+        )
+        if index > 0:
+            removed = previous - count
+            removed_from_previous = removed / previous * 100.0 if previous else 0.0
+            draw.text(
+                (bar_x, y - 38),
+                f"removed: {removed:,} ({removed_from_previous:.2f}% of previous stage)",
+                font=font(18),
+                fill=COLORS["gray"],
+            )
+        previous = count
+
+    draw.text(
+        (70, 1020),
+        "Final gradient evaluations: "
+        f"{gradient:,} / {initial:,} = {gradient / initial * 100.0:.2f}%",
+        font=font(22, True),
+        fill=COLORS["ink"],
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output_path)
+    print(output_path)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -37,11 +130,15 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="results/bicycle_cpu_backward_render_profile.png",
+        default="results/bicycle_cpu_backward_render_nsys_profile.png",
     )
     parser.add_argument(
         "--nsys-breakdown",
         default="results/bicycle_cpu_backward_render_sections.csv",
+    )
+    parser.add_argument(
+        "--filter-output",
+        default="results/bicycle_cpu_backward_render_filtering.png",
     )
     args = parser.parse_args()
 
@@ -67,10 +164,15 @@ def main():
     }
     image = Image.new("RGB", (1800, 1850), "#f8fafc")
     draw = ImageDraw.Draw(image)
-    draw.text((70, 45), "CPU BACKWARD::render profile", font=font(48, True), fill=COLORS["ink"])
+    draw.text(
+        (70, 45),
+        "Nsight Systems CPU Sampling Profile",
+        font=font(48, True),
+        fill=COLORS["ink"],
+    )
     draw.text(
         (70, 105),
-        "bicycle / images_8 / one camera / all 54,275 SfM Gaussians",
+        "bicycle / images_8 / sampled instruction locations; section times are estimates",
         font=font(25),
         fill=COLORS["gray"],
     )
@@ -164,6 +266,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     image.save(output)
     print(output)
+    draw_filtering_chart(rows, Path(args.filter_output))
 
 
 if __name__ == "__main__":
